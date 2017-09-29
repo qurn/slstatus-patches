@@ -1,0 +1,84 @@
+diff --git a/config.def.h b/config.def.h
+index 6370008..a72f217 100644
+--- a/config.def.h
++++ b/config.def.h
+@@ -48,6 +48,10 @@ static const char unknown_str[] = "n/a";
+  * vol_perc             OSS/ALSA volume in percent      "/dev/mixer"
+  * wifi_perc            WiFi signal in percent          interface name
+  * wifi_essid           WiFi ESSID                      interface name
++ *
++ * if you want a vertical bar shown instead of percentage put VBAR instead of %s
++ * in the format. The VBAR characters gets replaced with ▁▂▃▄▅▆▇█ in relation to
++ * the percentage.
+  */
+ static const struct arg args[] = {
+ 	/* function format          argument */
+diff --git a/slstatus.c b/slstatus.c
+index 89a3268..40f16a3 100644
+--- a/slstatus.c
++++ b/slstatus.c
+@@ -87,8 +87,13 @@ main(int argc, char *argv[])
+ 
+ 		status[0] = '\0';
+ 		for (i = len = 0; i < LEN(args); i++) {
+-			len += snprintf(status + len, sizeof(status) - len,
+-			                args[i].fmt, args[i].func(args[i].args));
++			if (strstr(args[i].fmt, "VBAR") != NULL) {
++				len += snprintf(status + len, sizeof(status) - len,
++						perctobar(args[i].func(args[i].args), args[i].fmt));
++			} else {
++				len += snprintf(status + len, sizeof(status) - len,
++						args[i].fmt, args[i].func(args[i].args));
++			}
+ 
+ 			if (len >= sizeof(status)) {
+ 				status[sizeof(status) - 1] = '\0';
+diff --git a/util.c b/util.c
+index 67b692a..8dd6d6e 100644
+--- a/util.c
++++ b/util.c
+@@ -4,6 +4,7 @@
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <string.h>
++#include <stdlib.h>
+ 
+ #include "util.h"
+ 
+@@ -41,3 +42,27 @@ pscanf(const char *path, const char *fmt, ...)
+ 
+ 	return (n == EOF) ? -1 : n;
+ }
++
++const char *
++perctobar(const char *perc, const char *fmt)
++{
++	char temp[sizeof(fmt)-1] = "";
++	const char *bars[] = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" };
++	int i;
++	int j=0;
++	for (i=0; fmt[i]!= '\0'; i++) {
++		if (&fmt[i] == strstr(fmt, "VBAR")) {
++			if (perc == NULL || atoi(perc)>100) {
++				strcat(temp, "X");
++				j=j+1;
++			} else {
++				strcat(temp, (bars[(7 * atoi(perc)) / 100]));
++				j=j+3;
++			}
++		} else if (&fmt[i] < strstr(fmt, "VBAR") || &fmt[i-3] > strstr(fmt, "VBAR")) {
++			temp[j] = fmt[i];
++			j=j+1;
++		}
++	}
++	return bprintf("%s",temp);
++}
+diff --git a/util.h b/util.h
+index e90c29d..5956e92 100644
+--- a/util.h
++++ b/util.h
+@@ -5,3 +5,4 @@ extern char buf[1024];
+ 
+ const char *bprintf(const char *fmt, ...);
+ int pscanf(const char *path, const char *fmt, ...);
++const char *perctobar(const char *perc, const char *fmt);
