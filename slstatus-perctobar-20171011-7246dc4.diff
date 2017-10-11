@@ -1,0 +1,92 @@
+diff --git a/config.def.h b/config.def.h
+index 6370008..1cff65c 100644
+--- a/config.def.h
++++ b/config.def.h
+@@ -49,9 +49,14 @@ static const char unknown_str[] = "n/a";
+  * wifi_perc            WiFi signal in percent          interface name
+  * wifi_essid           WiFi ESSID                      interface name
+  */
+-static const struct arg args[] = {
+-	/* function format          argument */
+-	{ cpu_perc, "[CPU %3s%%] ", NULL    },
+-	{ ram_perc, "[RAM %2s%%] ", NULL    },
+-	{ datetime, "[ %s ]",       "%F %T" },
+-};
++static void
++statusstr(size_t * len, char * status)
++{
++	if (atof(disk_free("/dev/sda2")) < 0.5)
++		*len += snprintf(status + *len, MAXLEN - *len, "Warning sda2 has only %s Gb Diskspace left "   , disk_free("/dev/sda2"));
++	if (strcmp(battery_state("BAT1"), "-") == 0)
++		*len += snprintf(status + *len, MAXLEN - *len, "BAT %s "   , battery_perc("BAT1"));
++	*len += snprintf(status + *len, MAXLEN - *len, "[CPU %3s] "  , perctobar(cpu_perc()));
++	*len += snprintf(status + *len, MAXLEN - *len, "[RAM %2s%%] "  , ram_perc());
++	*len += snprintf(status + *len, MAXLEN - *len, "[ %s ]"  , datetime("%F %T"));
++}
+diff --git a/slstatus.c b/slstatus.c
+index 89a3268..4e9d847 100644
+--- a/slstatus.c
++++ b/slstatus.c
+@@ -54,7 +54,7 @@ main(int argc, char *argv[])
+ {
+ 	struct sigaction act;
+ 	struct timespec start, current, diff, intspec, wait;
+-	size_t i, len;
++	size_t len;
+ 	int sflag = 0;
+ 	char status[MAXLEN];
+ 
+@@ -86,13 +86,10 @@ main(int argc, char *argv[])
+ 		clock_gettime(CLOCK_MONOTONIC, &start);
+ 
+ 		status[0] = '\0';
+-		for (i = len = 0; i < LEN(args); i++) {
+-			len += snprintf(status + len, sizeof(status) - len,
+-			                args[i].fmt, args[i].func(args[i].args));
+-
+-			if (len >= sizeof(status)) {
+-				status[sizeof(status) - 1] = '\0';
+-			}
++		len = 0;
++		statusstr(&len, status);
++		if (len >= sizeof(status)) {
++			status[sizeof(status) - 1] = '\0';
+ 		}
+ 
+ 		if (sflag) {
+diff --git a/util.c b/util.c
+index 67b692a..14ea036 100644
+--- a/util.c
++++ b/util.c
+@@ -4,6 +4,7 @@
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <string.h>
++#include <stdlib.h>
+ 
+ #include "util.h"
+ 
+@@ -41,3 +42,14 @@ pscanf(const char *path, const char *fmt, ...)
+ 
+ 	return (n == EOF) ? -1 : n;
+ }
++
++const char *
++perctobar(const char *perc)
++{
++	const char *bars[] = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" };
++	if (perc == NULL || atoi(perc)>100) {
++		return "X";
++	} else {
++		return (bars[(7 * atoi(perc)) / 100]);
++	}
++}
+diff --git a/util.h b/util.h
+index e90c29d..8e2f54e 100644
+--- a/util.h
++++ b/util.h
+@@ -5,3 +5,4 @@ extern char buf[1024];
+ 
+ const char *bprintf(const char *fmt, ...);
+ int pscanf(const char *path, const char *fmt, ...);
++const char *perctobar(const char *perc);
